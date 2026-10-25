@@ -1,0 +1,28 @@
+Claude will code all scripts using the skill /ponytail
+
+The objective is to build a customized mobile web app
+where the user can practice daily a quota of russian words
+and there also needs to be lesson on grammar phrasing logic
+suffixes and prefixes logic 
+and also association of images with vocabulary
+with multiple choice exams and questions to test his knowledge
+
+The data will mainly come from https://www.lenguia.com/tools/most-common-words/russian
+so export the data from the Top 1000 words with the MP3 file of the male voice pronunciation
+or you can take the built in russian voice pack from android for text to speech this is good enough too
+thats for the pure memory vocabulary accumulation of the user
+give an option of how many words the user wants to learn per day (eg 30 or 50)
+then test him on those words at the end of the day
+the words will be picked randomly not by order of usage
+there can also be category themes of vocabulary (ex colors, places, indicators, family, house)
+
+you can add an export import data file to save progress and data
+you can add exercises for typing in cyrillic, spaced repetition too if i struggle on certain words
+
+lessons and main content will be in both french and english as the users understands well both languages and can understand discern the meaning if he converges 2 languages
+so dont just make all in english and translate you have to find the extra meaning and nuance in french if there are
+
+User has a android S23 Phone
+
+it would be a offline PWA
+
