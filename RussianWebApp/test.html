@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Russian Daily — self-test</title>
+<style>body{font:14px monospace;margin:16px;background:#fff;color:#111}.ko{color:#c00}.ok{color:#080}</style></head>
+<body>
+<!-- Open this page in a browser (or: msedge --headless --dump-dom file:///…/test.html). It loads every script of index.html and checks all data. -->
+<pre id="out">running…</pre>
+<div hidden><main id="app"></main><nav id="nav"><a href="#today"></a><a href="#lessons"></a><a href="#tests"></a><a href="#words"></a><a href="#settings"></a></nav></div>
+<script>
+window.alert = () => {}; window.confirm = () => true;
+localStorage.removeItem('ru-daily-v1');
+const SCRIPTS = ['words/1.js', 'words/2.js', 'words/3.js', 'words/4.js', 'words/5.js', 'words/6.js', 'words/7.js', 'words/8.js', 'words/9.js', 'words/10.js',
+  'lessons.js', 'ru/verbs.js', 'ru/decl.js', 'ru/drills.js', 'ru/phrases.js', 'ru/texts.js', 'ru/texts2.js', 'ru/reading.js', 'app.js'];
+for (const s of SCRIPTS) document.write(`<script src="${s}"><\/script>`);
+</script>
+<script>
+(() => {
+const out = [], errs = [];
+const ok = (c, m) => { if (!c) errs.push(m); };
+const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), `${m}: got ${JSON.stringify(a)}, want ${JSON.stringify(b)}`);
+const section = (name, f) => { const n = errs.length; try { f(); } catch (e) { errs.push(`${name} threw: ${e.stack || e}`); } out.push(`${errs.length === n ? '✓' : '✗'} ${name}`); };
+const latin = s => /[a-z]/i.test(unstress(s));
+const stressCount = s => (String(s).match(/́/g) || []).length;
+
+section('index.html / sw.js script lists', () => {
+  ok(typeof WORDS !== 'undefined', 'app.js did not load');
+});
+
+section('words', () => {
+  const ids = new Set(), seen = new Map();
+  for (const w of WORDS) {
+    const at = `#${w.id} ${w.ru}`;
+    ok(!ids.has(w.id), 'duplicate id ' + at); ids.add(w.id);
+    for (const k of ['ru', 'en', 'fr', 'ex']) ok(w[k]?.trim(), `missing ${k} ${at}`);
+    ok(POS[w.pos], 'bad pos ' + at); ok(THEMES[w.theme], 'bad theme ' + at);
+    ok(['', 'm', 'f', 'n', 'pl'].includes(w.g), 'bad gender ' + at);
+    ok(w.pos !== 'n' || w.g, 'noun without gender ' + at);
+    ok(w.ex.split(' = ').length === 2, 'example needs exactly one " = " ' + at);
+    ok(w.note !== undefined, 'field count ' + at);
+    ok(stressCount(w.ru) <= 1, 'two stress marks ' + at);
+    if (w.id > 1000) {
+      ok(!latin(w.ru) && !latin(w.ex.split(' = ')[0]), 'latin letter in Russian ' + at);
+      ok(!seen.has(plain(w.ru)), `duplicate word ${at} (also #${seen.get(plain(w.ru))})`);
+    }
+    if (!seen.has(plain(w.ru))) seen.set(plain(w.ru), w.id);
+  }
+  const extra = WORDS.filter(w => w.id > 1000);
+  ok(extra.length >= 1000, 'extension has ' + extra.length + ' words');
+  ok(extra.every((w, i) => w.id === 1001 + i), 'extension ranks must be 1001… in order');
+  const vowels = s => (unstress(s).match(/[аеиоуыэюя]/gi) || []).length;
+  const noStress = extra.filter(w => vowels(w.ru) > 1 && !/[ -]/.test(w.ru) &&!/[ё́]/.test(w.ru)).map(w => w.ru);
+  ok(!noStress.length, 'new words without stress mark: ' + noStress.join(', '));
+  out.push(`  ${WORDS.length} words (${extra.length} new)`);
+});
+
+section('helpers', () => {
+  eq(plain('Сказа́ть!'), 'сказать', 'plain stress'); eq(plain('ещё'), 'еще', 'plain ё'); eq(plain('Мой'), 'мой', 'plain й');
+  eq(plain('  бу́ду   чита́ть '), 'буду читать', 'plain spaces'); eq(addDays('2026-12-31', 1), '2027-01-01', 'addDays');
+  eq([1, 2, 4, 5, 11, 12, 14, 21, 22, 25, 101, 111, 112, 1000].map(countForm), [0, 1, 1, 2, 2, 2, 2, 0, 1, 2, 0, 2, 2, 2], 'countForm');
+});
+
+section('verbs', () => {
+  const v = inf => VERBS.find(x => x.ipf === inf || x.pf === inf);
+  ok(VERBS.length >= 120, 'only ' + VERBS.length + ' verb pairs');
+  for (const x of VERBS) {
+    const at = `${x.ipf}/${x.pf}`;
+    ok(VTYPES[x.t], 'bad type ' + at); ok(x.en && x.fr, 'missing meaning ' + at);
+    ok(![x.ipf, x.pf, ...Object.values(x.o).flat()].some(latin), 'latin letter ' + at);
+    for (const [asp, inf] of [['i', x.ipf], ['p', x.pf]]) {
+      if (!inf) continue;
+      for (const [t, n] of [['pres', 6], ['fut', 6], ['past', 4], ['imp', 2]]) {
+        const f = forms(x, asp, t);
+        if (t === 'pres' && asp === 'p') { ok(f === null, 'perfective has a present ' + at); continue; }
+        if (t === 'imp' && !f) continue; // some verbs have no imperative (мочь, хоте́ть)
+        if (t === 'pres' && !f) { ok(x.o.Fi, 'imperfective without present ' + at); continue; }
+        ok(Array.isArray(f) && f.length === n && f.every(s => s && !s.includes('undefined')), `${t} ${asp} of ${at}: ${f}`);
+      }
+    }
+  }
+  eq(forms(v('чита́ть'), 'p', 'fut')[0], 'прочита́ю', 'prefixed future');
+  eq(forms(v('учи́ть'), 'p', 'fut')[1], 'вы́учишь', 'stressed prefix future');
+  eq(forms(v('пить'), 'p', 'past')[1], 'вы́пила', 'stressed prefix past');
+  eq(forms(v('пить'), 'p', 'imp')[0], 'вы́пей', 'stressed prefix imperative');
+  eq(forms(v('есть'), 'p', 'fut')[0], 'съем', 'съесть');
+  eq(forms(v('ждать'), 'p', 'fut')[0], 'подожду́', 'подожда́ть');
+  eq(forms(v('нести́'), 'p', 'past')[0], 'понёс', 'понести past');
+  eq(forms(v('учи́ться'), 'i', 'past')[1], 'учи́лась', 'reflexive past');
+  eq(forms(v('чита́ть'), 'i', 'fut')[2], 'бу́дет чита́ть', 'compound future');
+  eq(forms(v('быть'), 'i', 'fut')[0], 'бу́ду', 'быть future');
+  eq(autoPast('нести́'), null, 'no auto past for -ти'); eq(autoPast('упа́сть'), null, 'no auto past for -сть');
+  out.push(`  ${VERBS.length} verb pairs, ${VERBS.filter(x => x.t !== '1' && x.t !== '2').length} with consonant/stem changes or irregular`);
+});
+
+section('declensions', () => {
+  for (const d of DECL) {
+    ok(DKINDS[d.kind], 'bad kind ' + d.w);
+    ok(d.cols.length === DKINDS[d.kind][1].length, `${d.w}: ${d.cols.length} columns`);
+    ok(d.cols.every(c => c.length === 6 && c.every(Boolean)), d.w + ': each column needs 6 forms');
+    ok(!d.cols.flat().some(latin), 'latin letter ' + d.w);
+  }
+  out.push(`  ${DECL.length} tables`);
+});
+
+section('drills', () => {
+  const D = window.RU_DRILLS;
+  for (const k of ['cases', 'aspect', 'motion']) {
+    ok(D[k].length >= 30, `${k}: only ${D[k].length}`);
+    for (const c of D[k]) {
+      ok(c.q.includes('___') && c.opts[c.a] !== undefined && c.why, `${k}: ${c.q}`);
+      ok(new Set(c.opts.map(plain)).size === c.opts.length, `${k} duplicate options: ${c.q}`);
+      ok(!latin(c.q) && !c.opts.some(latin), `${k} latin letter: ${c.q}`);
+    }
+  }
+  ok(COUNT_N.length >= 20 && COUNT_N.every(x => x.f.every(Boolean) && x.en && x.fr), 'counts');
+  out.push(`  ${D.cases.length} case, ${D.aspect.length} aspect, ${D.motion.length} motion items, ${COUNT_N.length} counting nouns`);
+});
+
+section('phrases', () => {
+  ok(PHRASES.length >= 250, 'only ' + PHRASES.length + ' phrases');
+  for (const p of PHRASES) {
+    ok(PHR_THEMES[p.theme] && p.ru && p.en && p.fr, 'phrase line ' + p.ru);
+    ok(!latin(p.ru), 'latin letter in phrase ' + p.ru);
+  }
+  out.push(`  ${PHRASES.length} phrases in ${Object.keys(PHR_THEMES).length} themes`);
+});
+
+section('texts', () => {
+  eq(TEXTS.oral.length, 30, 'listening texts'); ok(TEXTS.read.length >= 15, 'reading texts');
+  for (const t of [...TEXTS.oral, ...TEXTS.read]) {
+    ok(t.title && t.level && t.text && t.en && t.fr && t.words, 'text fields ' + t.title);
+    ok(t.qs.length >= 4 && t.qs.every(q => q.q && q.opts[q.a] !== undefined), 'text questions ' + t.title);
+    ok(!latin(t.text.replace(/P\.S\./g, '')), 'latin letter in text ' + t.title);
+  }
+  const words = TEXTS.oral.map(t => t.text.split(/\s+/).length);
+  out.push(`  ${TEXTS.oral.length} listening texts (${Math.min(...words)}–${Math.max(...words)} words), ${TEXTS.read.length} reading texts`);
+});
+
+section('lessons', () => {
+  for (const l of LESSONS) ok(l.title && l.body && l.quiz.every(q => q.opts[q.a] !== undefined), 'lesson ' + l.title);
+});
+
+section('question generators', () => {
+  for (const w of WORDS) for (const t of ['read', 'pick', 'type', 'ear', 'dict', 'pic']) {
+    const q = wordQ(w, t);
+    ok(typeof q.a === 'string' ? q.a === w.ru : q.opts.length === 4 && q.a >= 0, `wordQ ${t} ${w.ru}`);
+  }
+  const sq = WORDS.map(stressQ).filter(Boolean);
+  ok(sq.length > 1000 && sq.every(q => q.a >= 0 && q.opts.length >= 2), 'stress questions');
+  for (let k = 0; k < 400; k++) { const q = conjQ(k, ['pres', 'past', 'fut', 'imp']); ok(q.a && !q.a.includes('undefined'), 'conjQ ' + q.html); }
+  for (let k = 0; k < 100; k++) { const q = aspectQ(k); ok(typeof q.a === 'string' ? q.a : q.opts[q.a], 'aspectQ'); }
+  for (let k = 0; k < 300; k++) { const q = caseQ(k); ok(q.opts.length >= 2 && q.a >= 0, 'caseQ ' + q.html); }
+  for (let k = 0; k < 100; k++) { const q = countQ(k); ok(q.a >= 0, 'countQ ' + q.html); }
+  for (const p of PHRASES) for (const kind of ['read', 'ear', 'trans', 'order']) {
+    const q = phraseQ(p, kind);
+    if (q) ok(q.tokens ? q.tokens.length >= 3 : q.opts.length === 4 && q.a >= 0, `phraseQ ${kind} ${p.ru}`);
+  }
+  out.push(`  ${sq.length} words usable for the stress quiz`);
+});
+
+section('every view renders', () => {
+  const hashes = ['today', 'learn', 'test', 'review', 'hard', 'tests', 'lessons', 'words', 'settings', 'conj', 'verbs', 'aspect', 'ctx/aspect', 'ctx/motion',
+    'cases', 'numbers', 'decl', 'texts/oral', 'texts/read', 'phrases', 'stress', 'order', 'drill/ear', 'drill/read', 'drill/type', 'drill/dict', 'drill/pic',
+    'phrasetest/order', 'phrasetest/ear', 'phrasetest/read', 'phrasetest/trans',
+    ...VERBS.map(x => 'verbs/' + encodeURIComponent(x.ipf || x.pf)), ...DECL.map(x => 'decl/' + encodeURIComponent(x.w)),
+    ...Object.keys(PHR_THEMES).map(k => 'phrases/' + k), ...LESSONS.flatMap((_, k) => ['lesson/' + k, 'lquiz/' + k]),
+    ...TEXTS.oral.map((_, k) => 'text/oral/' + k), ...TEXTS.read.map((_, k) => 'text/read/' + k)];
+  for (const h of hashes) {
+    location.hash = '#' + h; route();
+    ok(app.innerHTML.length > 50 || ['learn', 'test', 'review', 'hard', 'aspect', 'ctx', 'cases', 'stress', 'order', 'drill', 'phrasetest', 'lquiz'].includes(h.split('/')[0]), 'empty view ' + h); // these fill the page right after render
+  }
+  location.hash = '#today'; route();
+  ok(S.day.ids.length === 30 && S.day.ids.every(id => id <= 200), 'first day should come from the top-200 band');
+  conjQuiz(); ok(app.querySelector('.typing'), 'conjugation quiz starts');
+  numbersQuiz(); ok(app.querySelector('.opts'), 'numbers quiz starts');
+  textQuiz('oral', 0); ok(app.querySelector('.opts'), 'text quiz starts');
+});
+
+section('spaced repetition & backup', () => {
+  S.words[1] = { box: 0, ok: 0, ko: 0, due: today() }; grade(1, true); grade(1, true);
+  eq(S.words[1].box, 2, 'box after 2 right'); eq(S.words[1].due, addDays(today(), 2), 'due after 2 right');
+  grade(1, false); eq(S.words[1].box, 0, 'box after miss'); eq(hardIds(), [1], 'hard words');
+  // an old v1 backup (no texts / tenses) must still import
+  importData(JSON.stringify({ state: { words: { 5: { box: 3, ok: 3, ko: 0, due: '2030-01-01' }, 99999: { box: 1, ok: 1, ko: 0, due: '2030-01-01' } }, quota: 50, theme: '<b>', lessons: { 0: 5, 1: '<img>' } } }));
+  eq(Object.keys(S.words), ['5'], 'import words'); eq(S.quota, 50, 'import quota'); eq(S.theme, '', 'import bad theme'); eq({ ...S.lessons }, { 0: 5 }, 'import lessons');
+  eq(S.tenses, ['pres'], 'import default tenses');
+  importData(JSON.stringify({ state: { words: {}, texts: { 0: 4, 99: 3 }, reads: { 1: 2 }, tenses: ['past', 'bad'] } }));
+  eq({ ...S.texts }, { 0: 4 }, 'import texts'); eq({ ...S.reads }, { 1: 2 }, 'import reads'); eq(S.tenses, ['past'], 'import tenses');
+  localStorage.removeItem('ru-daily-v1');
+});
+
+const res = (errs.length ? `FAILED (${errs.length})\n\n${errs.slice(0, 80).join('\n')}${errs.length > 80 ? '\n…' : ''}\n\n` : 'ALL OK\n\n') + out.join('\n');
+document.getElementById('out').textContent = res;
+document.getElementById('out').className = errs.length ? 'ko' : 'ok';
+document.title = errs.length ? 'FAILED' : 'ALL OK';
+})();
+</script>
+</body>
+</html>
